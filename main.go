@@ -17,6 +17,9 @@ const maxY int = 15
 var board [maxX][maxY]Field
 var direction int = 0 //0 - lewo, 2 prawo, 1 góra, 3 dół
 var isAlive = true
+var options = false
+var easy = false
+var speed uint = 200
 
 var points int = 0
 var record int
@@ -34,6 +37,18 @@ type Snake struct {
 	parts         []Position
 }
 
+func (p *Position) goOnOtherSide() {
+	if direction == 0 {
+		p.x = maxX - 2
+	} else if direction == 2 {
+		p.x = 1
+	} else if direction == 1 {
+		p.y = maxY - 2
+	} else if direction == 3 {
+		p.y = 1
+	}
+}
+
 func clearTerminal() {
 	for i := 0; i < 50; i++ {
 		for j := 0; j < 120; j++ {
@@ -44,14 +59,36 @@ func clearTerminal() {
 
 func drawBoard() {
 	readRecordFromFile()
-	for i := 0; i < maxX; i++ {
-		for j := 0; j < maxY; j++ {
-			if i == 0 || j == 0 || i == maxX-1 || j == maxY-1 {
-				board[i][j].char = "#"
-				putxy(i, j, "#")
-			} else {
-				board[i][j].char = " "
-				putxy(i, j, " ")
+	if easy {
+		for i := 0; i < maxX; i++ {
+			for j := 0; j < maxY; j++ {
+				if (i == 0 && j == 0) || (i == 0 && j == maxY-1) || (i == maxX-1 && j == 0) || (i == maxX-1 && j == maxY-1) {
+					putxy(i, j, "+")
+					board[i][j].char = "#"
+
+				} else if i == 0 || i == maxX-1 {
+					putxy(i, j, "|")
+					board[i][j].char = "#"
+
+				} else if j == 0 || j == maxY-1 {
+					putxy(i, j, "-")
+					board[i][j].char = "#"
+				} else {
+					board[i][j].char = " "
+					putxy(i, j, " ")
+				}
+			}
+		}
+	} else {
+		for i := 0; i < maxX; i++ {
+			for j := 0; j < maxY; j++ {
+				if i == 0 || j == 0 || i == maxX-1 || j == maxY-1 {
+					board[i][j].char = "#"
+					putxy(i, j, "#")
+				} else {
+					board[i][j].char = " "
+					putxy(i, j, " ")
+				}
 			}
 		}
 	}
@@ -60,14 +97,31 @@ func drawBoard() {
 }
 
 func drawMenu() {
-	putxy(21, 0, "SNAKE")
+	putTitle()
 	putxy(20, 4, "New Game")
 	putxy(20, 7, "Options")
 	putxy(21, 10, "Exit")
 }
 
+func drawOptions() {
+	putTitle()
+	putxy(20, 4, "1. Speed")
+	putxy(20, 7, "2. Hard")
+	putxy(21, 10, "Back")
+	putxy(31, 4, "fast     ")
+}
+
+func putTitle() {
+	fmt.Printf("\x1b[%d;%df\u001b[32;1m%s\u001b[0m", 2, 42, "SNAKE")
+}
+
 func putxy(x, y int, s string) {
-	fmt.Printf("\x1b[%d;%df%s", y+1, x+21, s)
+	if s == "X" {
+		fmt.Printf("\x1b[%d;%df\u001b[31;1m%s\u001b[0m", y+1, x+21, s)
+	} else {
+		fmt.Printf("\x1b[%d;%df%s", y+1, x+21, s)
+	}
+
 	if x > 0 && x < maxX && y > 0 && y < maxY {
 		board[x][y].char = s
 	}
@@ -76,7 +130,7 @@ func putxy(x, y int, s string) {
 func putPosition(p Position, s string) {
 	x := p.x
 	y := p.y
-	fmt.Printf("\x1b[%d;%df%s", y+1, x+21, s)
+	fmt.Printf("\x1b[%d;%df\u001b[32;1m%s\u001b[0m", y+1, x+21, s)
 	if x > 0 && x < maxX && y > 0 && y < maxY {
 		board[x][y].char = s
 	}
@@ -168,11 +222,25 @@ func goInDirection(s *Snake) {
 		s.parts = append(s.parts, t)
 		putSnake(*s)
 		generateFood()
-		givePoints(10)
+		givePoints()
 
 	} else if char == "#" { //trafienie na sciane
-		putSnake(*s)
-		isAlive = false
+		if easy { //przechodzenie przez sciany na poziomie łatwym
+			s.parts[s.pivot].goOnOtherSide()
+			if board[s.parts[s.pivot].x][s.parts[s.pivot].y].char == "S" { //sprawdzenie czy po przejściu na drugą stronę na miejscu gdzie ma się pojawić snake nie ma przeszkód
+				isAlive = false
+			} else if board[s.parts[s.pivot].x][s.parts[s.pivot].y].char == "X" {
+				s.length++
+				s.parts = append(s.parts, t)
+				putSnake(*s)
+				generateFood()
+				givePoints()
+			}
+			putSnake(*s)
+		} else {
+			putSnake(*s)
+			isAlive = false
+		}
 
 	} else if char == "S" { //trafienie na swój ogon
 		putSnake(*s)
@@ -230,13 +298,49 @@ func chooseMenu() {
 			direction++
 		} else if key == keyboard.KeyEnter {
 			if direction == 0 {
-				break
+				if options {
+					if speed == 130 {
+						speed = 200
+						putxy(31, 4, "fast     ")
+					} else if speed == 200 {
+						speed = 250
+						putxy(31, 4, "normal   ")
+					} else if speed == 250 {
+						speed = 300
+						putxy(31, 4, "slow     ")
+					} else if speed == 300 {
+						speed = 130
+						putxy(31, 4, "very fast")
+					}
+				} else {
+					break
+				}
 
 			} else if direction == 1 {
-				//options
+				if options {
+					if easy {
+						easy = false
+						putxy(20, 7, "2. Hard")
+					} else {
+						easy = true
+						putxy(20, 7, "2. Easy")
+					}
+				} else {
+					options = true
+					clearTerminal()
+					direction = 0
+					drawOptions()
+				}
 
 			} else if direction == 2 {
-				//exit
+				if options {
+					options = false
+					clearTerminal()
+					direction = 0
+					drawMenu()
+				} else {
+					os.Exit(0)
+				}
 			}
 
 		}
@@ -254,7 +358,13 @@ func generateFood() {
 	}
 }
 
-func givePoints(p int) {
+func givePoints() {
+	var p int
+	if easy {
+		p = 2
+	} else {
+		p = 10
+	}
 	points += p
 	fmt.Printf("\x1b[%d;%df%d", maxY, maxX+33, points)
 	if points > record {
@@ -282,8 +392,8 @@ func setNewRecord() {
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	var speed uint = 200
-	if err := keyboard.Open(); err != nil {
+	err := keyboard.Open()
+	if err != nil {
 		panic(err)
 	}
 	defer func() {
